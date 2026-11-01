@@ -11,4 +11,17 @@ export class ProfilesService {
       where: { userId },
     });
   }
+
+  async createFromRegistration(
+    userId: string,
+    displayName: string,
+  ): Promise<UserProfile> {
+    // If the profile doesn't exist, create it.
+    // If it already exists, leave it unchanged.
+    return this.prisma.userProfile.upsert({
+      where: { userId },
+      update: {},
+      create: { userId, displayName },
+    });
+  }
 }
