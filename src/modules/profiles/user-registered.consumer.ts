@@ -21,8 +21,11 @@ export class UserRegisteredConsumer implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(UserRegisteredConsumer.name);
   private readonly queue = 'devconnect.users.user-registered';
   private readonly routingKey = 'user.registered';
-  private channel!: Channel;
+  private channel: Channel | null = null;
   private consumerTag?: string;
+  private isStarting = false;
+  private isConsuming = false;
+  private isShuttingDown = false;
 
   constructor(
     private readonly rabbitMqService: RabbitMqService,
@@ -31,48 +34,130 @@ export class UserRegisteredConsumer implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    this.channel = this.rabbitMqService.getChannel();
+    this.rabbitMqService.on('disconnected', this.handleDisconnected);
+    this.rabbitMqService.on('connected', this.handleConnected);
 
-    const exchange = this.configService.get<string>('RABBITMQ_EXCHANGE');
+    if (this.rabbitMqService.isReady) {
+      await this.startConsumer();
+    }
+  }
 
-    if (!exchange) {
-      throw new Error('RABBITMQ_EXCHANGE is not configured.');
+  private readonly handleDisconnected = (): void => {
+    this.channel = null;
+    this.consumerTag = undefined;
+    this.isConsuming = false;
+  };
+
+  private readonly handleConnected = (): void => {
+    void this.startConsumer();
+  };
+
+  private async startConsumer(): Promise<void> {
+    if (this.isShuttingDown || this.isStarting || this.isConsuming) {
+      return;
     }
 
-    await this.channel.assertExchange(exchange, 'topic', {
-      durable: true,
-    });
+    this.isStarting = true;
 
-    await this.channel.assertQueue(this.queue, {
-      durable: true,
-    });
+    try {
+      const channel = this.rabbitMqService.getChannel();
+      this.channel = channel;
 
-    await this.channel.bindQueue(this.queue, exchange, this.routingKey);
+      const exchange = this.configService.get<string>('RABBITMQ_EXCHANGE');
 
-    await this.channel.prefetch(1);
+      if (!exchange) {
+        throw new Error('RABBITMQ_EXCHANGE is not configured.');
+      }
 
-    const result = await this.channel.consume(
-      this.queue,
-      (message) => {
-        if (message) {
-          void this.handleMessage(message);
+      await channel.assertExchange(exchange, 'topic', {
+        durable: true,
+      });
+
+      await channel.assertQueue(this.queue, {
+        durable: true,
+      });
+
+      await channel.bindQueue(this.queue, exchange, this.routingKey);
+
+      await channel.prefetch(1);
+
+      const result = await channel.consume(
+        this.queue,
+        (message) => {
+          if (message) {
+            void this.handleMessage(message, channel);
+          }
+        },
+        { noAck: false },
+      );
+
+      if (
+        this.isShuttingDown ||
+        !this.rabbitMqService.isReady ||
+        this.rabbitMqService.getChannel() !== channel
+      ) {
+        try {
+          await channel.cancel(result.consumerTag);
+        } catch {
+          this.logger.debug(
+            'Could not cancel stale consumer; its channel may already be closed.',
+          );
         }
-      },
-      { noAck: false },
-    );
+        return;
+      }
 
-    this.consumerTag = result.consumerTag;
+      this.consumerTag = result.consumerTag;
 
-    this.logger.log(`Listening for ${this.routingKey} events`);
+      this.isConsuming = true;
+
+      this.logger.log(`Listening for ${this.routingKey} events`);
+    } catch (error) {
+      this.logger.error(
+        'Failed to start user.registered consumer',
+        error instanceof Error ? error.stack : String(error),
+      );
+    } finally {
+      this.isStarting = false;
+
+      try {
+        if (
+          !this.isShuttingDown &&
+          this.rabbitMqService.isReady &&
+          !this.isConsuming &&
+          this.rabbitMqService.getChannel() !== this.channel
+        ) {
+          void this.startConsumer();
+        }
+      } catch (err) {
+        this.logger.debug(
+          'Skipped consumer restart: connection lost while checking channel',
+          err,
+        );
+      }
+    }
   }
 
   async onModuleDestroy(): Promise<void> {
-    if (this.consumerTag) {
-      await this.channel.cancel(this.consumerTag);
+    this.isShuttingDown = true;
+    this.rabbitMqService.off('disconnected', this.handleDisconnected);
+    this.rabbitMqService.off('connected', this.handleConnected);
+
+    if (this.consumerTag && this.channel) {
+      try {
+        await this.channel.cancel(this.consumerTag);
+      } catch (error) {
+        this.logger.warn(
+          `Failed to cancel consumer during shutdown (consumerTag=${this.consumerTag})`,
+          error instanceof Error ? error.stack : error,
+        );
+      }
     }
   }
 
-  private async handleMessage(message: ConsumeMessage): Promise<void> {
+  private async handleMessage(
+    message: ConsumeMessage,
+    channel: Channel,
+  ): Promise<void> {
     let event: UserRegisteredEvent;
 
     try {
@@ -80,12 +165,12 @@ export class UserRegisteredConsumer implements OnModuleInit, OnModuleDestroy {
 
       if (typeof event !== 'object' || event === null || Array.isArray(event)) {
         this.logger.warn('Received invalid user.registered event');
-        this.channel.nack(message, false, false);
+        channel.nack(message, false, false);
         return;
       }
     } catch {
       this.logger.warn('Received malformed user.registered JSON');
-      this.channel.nack(message, false, false);
+      channel.nack(message, false, false);
       return;
     }
 
@@ -97,7 +182,7 @@ export class UserRegisteredConsumer implements OnModuleInit, OnModuleDestroy {
       !isValidUuid(event.userId)
     ) {
       this.logger.warn('Received invalid user.registered event');
-      this.channel.nack(message, false, false);
+      channel.nack(message, false, false);
       return;
     }
 
@@ -107,7 +192,7 @@ export class UserRegisteredConsumer implements OnModuleInit, OnModuleDestroy {
         event.displayName,
       );
 
-      this.channel.ack(message);
+      channel.ack(message);
       this.logger.log(`Processed user.registered for ${event.userId}`);
     } catch (error) {
       const errorMessage =
@@ -117,7 +202,7 @@ export class UserRegisteredConsumer implements OnModuleInit, OnModuleDestroy {
         `Failed to process user.registered event: ${errorMessage}`,
       );
 
-      this.channel.nack(message, false, true);
+      channel.nack(message, false, true);
     }
   }
 }
