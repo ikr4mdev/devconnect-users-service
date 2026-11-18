@@ -71,7 +71,7 @@ You also need access to the shared DevConnect contracts package.
 ### 1. Clone the repository
 
 ```bash
-git clone <YOUR_REPOSITORY_URL>
+git clone https://github.com/ikr4mdev/devconnect-users-service.git
 cd devconnect-users-service
 ```
 
