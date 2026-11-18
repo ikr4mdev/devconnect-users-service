@@ -1,124 +1,245 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# DevConnect Users Service
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+The Users Service is a NestJS microservice responsible for managing user profiles in the DevConnect platform.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+It communicates synchronously through gRPC and asynchronously through RabbitMQ.
 
-## Description
+## Responsibilities
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+- Retrieve user profiles by user ID through gRPC.
+- Consume `user.registered` events published by the Auth Service.
+- Create user profiles in PostgreSQL when new users register.
+- Handle duplicate event deliveries safely using Prisma upsert.
 
-## Project setup
+## Architecture
 
-```bash
-$ npm install
-```
+The service integrates with:
 
-## Compile and run the project
+- **Auth Service:** Publishes user registration events through RabbitMQ.
+- **API Gateway:** Can retrieve user profiles through gRPC.
+- **PostgreSQL:** Stores user profile information.
+- **RabbitMQ:** Delivers asynchronous user registration events.
 
-```bash
-# development
-$ npm run start
+### Communication
 
-# watch mode
-$ npm run start:dev
+**gRPC**
 
-# production mode
-$ npm run start:prod
-```
+- Service: `UsersService`
+- Method: `GetProfileByUserId`
+- Package: `users.v1`
+- Default address: `0.0.0.0:5002`
+- Protocol definition: `users/v1/users.proto` from the shared contracts package.
 
-## Run tests
+**RabbitMQ**
 
-```bash
-# unit tests
-$ npm run test
+- Exchange: Configured through `RABBITMQ_EXCHANGE`
+- Exchange type: `topic`
+- Queue: `devconnect.users.user-registered`
+- Routing key: `user.registered`
+- Queue durability: Enabled
+- Message acknowledgement: Manual
+- Prefetch: `1`
 
-# e2e tests
-$ npm run test:e2e
+The Auth Service publishes persistent JSON messages using an outbox pattern. The Users Service validates incoming messages and acknowledges successful processing.
 
-# test coverage
-$ npm run test:cov
-```
+## Technology Stack
 
-## Deployment
+- Node.js
+- NestJS
+- TypeScript
+- gRPC
+- RabbitMQ
+- PostgreSQL
+- Prisma ORM
+- Jest
+- Oxlint
+- Prettier
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+## Prerequisites
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+Install the following before running the service:
 
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
+- Node.js
+- npm
+- PostgreSQL
+- RabbitMQ
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+You also need access to the shared DevConnect contracts package.
 
-## Observability
+## Getting Started
 
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
-
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
-
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
-
-To add it to this project:
+### 1. Clone the repository
 
 ```bash
-$ npm install @nestjs/observe
+git clone <YOUR_REPOSITORY_URL>
+cd devconnect-users-service
 ```
 
-Then follow the [setup guide](https://docs.nestjs.com/observability/overview) - it takes a single import and an app key.
+### 2. Install dependencies
 
-The free plan needs no payment details and covers 300,000 events a month. You can also browse the [live demo](https://www.observe-demo.nestjs.com/dashboard) first - the whole dashboard over a busy service's data, with nothing to install.
+```bash
+npm install
+```
 
-## Resources
+### 3. Configure environment variables
 
-Check out a few resources that may come in handy when working with NestJS:
+Create a `.env` file in the project root:
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observe](https://observe.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+```dotenv
+# PostgreSQL
+DATABASE_URL=
 
-## Support
+# RabbitMQ
+RABBITMQ_URL=
+RABBITMQ_EXCHANGE=
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+# gRPC
+GRPC_URL=0.0.0.0:5002
+```
 
-## Stay in touch
+Configure the database connection string, RabbitMQ connection URL, and exchange name.
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+The gRPC address defaults to `0.0.0.0:5002` if `GRPC_URL` is not provided.
+
+### 4. Generate Prisma Client
+
+```bash
+npx prisma generate
+```
+
+### 5. Apply database migrations
+
+For local development:
+
+```bash
+npx prisma migrate dev
+```
+
+For production or staging:
+
+```bash
+npx prisma migrate deploy
+```
+
+Check migration status:
+
+```bash
+npx prisma migrate status
+```
+
+### 6. Start the service
+
+Development:
+
+```bash
+npm run start:dev
+```
+
+Production:
+
+```bash
+npm run build
+npm run start:prod
+```
+
+## Database
+
+The service uses PostgreSQL through Prisma ORM.
+
+### UserProfile model
+
+| Field | Description |
+|---|---|
+| `id` | Unique profile identifier (UUID) |
+| `userId` | Auth Service user identifier (unique UUID) |
+| `displayName` | User's display name |
+| `bio` | Optional profile biography |
+| `avatarUrl` | Optional profile image URL |
+| `createdAt` | Profile creation timestamp |
+| `updatedAt` | Last update timestamp |
+
+The `userId` field is unique, ensuring that each user has at most one profile.
+
+The Users Service maintains its own database and does not directly access the Auth Service database.
+
+## Testing
+
+Run unit tests:
+
+```bash
+npm test -- --runInBand
+```
+
+Run tests in watch mode:
+
+```bash
+npm run test:watch
+```
+
+Generate coverage:
+
+```bash
+npm run test:cov
+```
+
+Run e2e tests:
+
+```bash
+npm run test:e2e
+```
+
+The e2e test configuration is present, but e2e test cases have not yet been implemented.
+
+## Code Quality
+
+Run Oxlint:
+
+```bash
+npm run lint
+```
+
+Format source and test files:
+
+```bash
+npm run format
+```
+
+Build the application:
+
+```bash
+npm run build
+```
+
+## Project Structure
+
+```text
+src/
+├── core/
+│   └── utils/
+├── infrastructure/
+│   ├── database/
+│   └── rabbitmq/
+├── modules/
+│   └── profiles/
+├── app.module.ts
+└── main.ts
+
+prisma/
+├── migrations/
+└── schema.prisma
+
+test/
+└── jest-e2e.json
+```
+
+## Shared Contracts
+
+The service uses:
+
+`@ikr4mdev/devconnect-contracts`
+
+This package provides shared protobuf definitions and event-related contracts used for communication between DevConnect microservices.
 
 ## License
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+UNLICENSED — Private project.

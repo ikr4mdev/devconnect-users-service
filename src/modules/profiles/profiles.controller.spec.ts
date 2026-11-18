@@ -3,7 +3,7 @@ import { ProfilesController } from './profiles.controller';
 import { ProfilesService } from './profiles.service';
 import { RpcException } from '@nestjs/microservices';
 import { status } from '@grpc/grpc-js';
-import { UsersV1 } from '@devconnect-microservices/devconnect-contracts';
+import { UsersV1 } from '@ikr4mdev/devconnect-contracts';
 
 describe('ProfilesController', () => {
   let controller: ProfilesController;

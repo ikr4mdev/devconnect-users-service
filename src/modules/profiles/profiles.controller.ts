@@ -1,7 +1,7 @@
 import { Controller } from '@nestjs/common';
 import { GrpcMethod, RpcException } from '@nestjs/microservices';
 import { ProfilesService } from './profiles.service';
-import { UsersV1 } from '@devconnect-microservices/devconnect-contracts';
+import { UsersV1 } from '@ikr4mdev/devconnect-contracts';
 import { status } from '@grpc/grpc-js';
 import { isValidUuid } from '@/core';
 

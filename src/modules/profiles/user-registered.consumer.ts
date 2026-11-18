@@ -85,7 +85,12 @@ export class UserRegisteredConsumer implements OnModuleInit, OnModuleDestroy {
         this.queue,
         (message) => {
           if (message) {
-            void this.handleMessage(message, channel);
+            this.handleMessage(message, channel).catch((error) => {
+              this.logger.error(
+                `Unhandled error while processing message (deliveryTag=${message.fields.deliveryTag})`,
+                error instanceof Error ? error.stack : String(error),
+              );
+            });
           }
         },
         { noAck: false },

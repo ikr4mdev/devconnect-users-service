@@ -12,7 +12,7 @@ async function bootstrap() {
         package: 'users.v1',
         protoPath: join(
           process.cwd(),
-          'node_modules/@devconnect-microservices/devconnect-contracts/proto/users/v1/users.proto',
+          'node_modules/@ikr4mdev/devconnect-contracts/proto/users/v1/users.proto',
         ),
         url: process.env.GRPC_URL ?? '0.0.0.0:5002',
         loader: {
@@ -22,6 +22,7 @@ async function bootstrap() {
     },
   );
 
+  app.enableShutdownHooks();
   await app.listen();
 }
 void bootstrap();
